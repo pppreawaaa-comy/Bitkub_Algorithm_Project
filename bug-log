@@ -1,0 +1,85 @@
+Bug Log
+========
+
+Purpose:
+This file records bugs, their root cause, and the fix so future issues can be diagnosed faster.
+
+------------------------------------------------------------
+Bug #001: "Cannot read properties of null (reading 'reset')"
+Date: 2026-10-04
+Module / Area: Browser app: Add book form
+
+Cause:
+The form attempted to call a reset method on a null DOM element. In this app flow, the submit action was trying to reset the form after adding a book, but the target form reference was missing or not attached to the page when the event fired. This usually happens when the page structure changes, the element ID is wrong, or the form object is referenced before it is created.
+
+Symptoms:
+- User clicks "Add to catalog"
+- Browser console shows: "Cannot read properties of null (reading 'reset')"
+- The new book is not added or the page state remains inconsistent
+
+Solution:
+1. Confirm the form element is present before calling reset().
+2. Use a safe reference such as:
+   element = document.getElementById("book-form")
+   if element is not None:
+       element.reset()
+3. Ensure the DOM is loaded before binding the submit handler.
+4. Verify the element ID matches the HTML form id exactly.
+5. Add a small guard in the event handler to avoid calling methods on a null object.
+
+Prevention:
+- Always check for null before calling DOM methods.
+- Keep the form id and script selectors consistent.
+- Add a browser console log or debug breakpoint when a form action fails.
+- Keep bug notes in this log for quick reference during future debugging.
+
+------------------------------------------------------------
+Bug #002: "Cannot read properties of null (reading 'reset')" in browser form submission
+Date: 2026-10-04
+Module / Area: Browser app: Add book form
+
+Cause:
+The submit handler was attached with a direct DOM query and then immediately called `event.currentTarget.reset()` without checking whether the event target was a valid form element. If the page structure ever changes or the form object is unavailable, the browser reports a null reference while trying to call `reset()`.
+
+Symptoms:
+- User clicks "Add to catalog"
+- Browser console shows: "Cannot read properties of null (reading 'reset')"
+- The form does not clear and the message area may not update as expected
+
+Solution:
+1. Guard the form element before binding the event listener.
+2. Verify `event.currentTarget` is an instance of `HTMLFormElement` before using it.
+3. Reset the form only if the `reset` method is defined.
+4. Keep the submit logic inside a null-safe block to avoid crashes.
+
+Prevention:
+- Always check DOM elements before interacting with them.
+- Validate event targets when working with browser form submissions.
+- Add a reset guard and clear error messages in debug mode.
+
+------------------------------------------------------------
+Template for future bugs
+
+Bug #NNN: [Short bug title]
+Date:
+Module / Area:
+
+Cause:
+[Explain what triggered the issue]
+
+Symptoms:
+[What the user observed]
+
+Solution:
+[How the issue was fixed]
+
+Prevention:
+[How to avoid repeating it]
+
+------------------------------------------------------------
+General debugging checklist
+- Check error message carefully before changing code.
+- Confirm the element or object is initialized before use.
+- Review recent code changes and refactors.
+- Validate browser / app console logs.
+- Test both the happy path and error path after the fix.

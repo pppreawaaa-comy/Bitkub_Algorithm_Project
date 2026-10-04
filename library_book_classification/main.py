@@ -46,10 +46,9 @@ def console_main():
         if choice == "1":
             display_books(books)
         elif choice == "2":
-            book_id = input("Enter Book ID: ").strip()
-            title = input("Enter title: ").strip()
+            title = input("Enter book name: ").strip()
             subject = input("Enter subject: ").strip()
-            _, message = add_book(books, book_id, title, subject)
+            _, message = add_book(books, title, subject)
             print(message)
         elif choice == "3":
             insertion_sort(books)

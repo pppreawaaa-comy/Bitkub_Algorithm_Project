@@ -16,10 +16,12 @@ if __package__:
     from .algorithms import insertion_sort
     from .classification import add_book
     from .data import MOCK_BOOKS, SUBJECT_CODES, books as starter_books
+    from .test_runner import run_test_process
 else:
     from algorithms import insertion_sort
     from classification import add_book
     from data import MOCK_BOOKS, SUBJECT_CODES, books as starter_books
+    from test_runner import run_test_process
 
 
 PAGE = """<!doctype html>
@@ -65,6 +67,11 @@ PAGE = """<!doctype html>
     label { display: block; margin: 13px 0 6px; font-size: 12px; font-weight: 650; }
     .class-hint { min-height: 30px; padding: 8px 0; color: #62718a; font-size: 12px; }
     .form-card button { width: 100%; }
+    .test-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 15px; }
+    .test-heading h3 { margin: 0; font-size: 14px; }
+    .test-heading button { width: auto; min-height: 34px; padding: 7px 10px; font-size: 12px; }
+    #test-log { min-height: 94px; max-height: 190px; overflow: auto; margin: 9px 0 0; padding: 10px; border: 1px solid #edf0f5; border-radius: 8px; background: #f7f9fd; color: #172b4d; font: 11px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #test-log[data-kind="error"] { color: #b42318; }
     #message { min-height: 22px; margin: 10px 0 0; font-size: 12px; }
     #message[data-kind="error"] { color: #b42318; }
     #message[data-kind="success"] { color: #18804b; }
@@ -114,12 +121,10 @@ PAGE = """<!doctype html>
       </section>
       <aside class="card form-card">
         <h2>Add a book</h2>
-        <p class="muted">Enter a book's details and its class number will be assigned automatically.</p>
+        <p class="muted">Enter a book name and choose a subject. Its ID and class number will be assigned automatically.</p>
         <form id="add-form">
-          <label for="book-id">Book ID</label>
-          <input id="book-id" name="id" placeholder="e.g. B031" required>
-          <label for="title">Title</label>
-          <input id="title" name="title" placeholder="Enter the book title" required>
+          <label for="title">Book name</label>
+          <input id="title" name="title" placeholder="Enter the book name" required>
           <label for="subject">Subject</label>
           <select id="subject" name="subject" required>
             <option value="">Choose a subject</option>
@@ -129,6 +134,13 @@ PAGE = """<!doctype html>
           <button type="submit">Add to catalog</button>
           <p id="message" role="status" aria-live="polite"></p>
         </form>
+        <section aria-labelledby="test-heading">
+          <div class="test-heading">
+            <h3 id="test-heading">Test log</h3>
+            <button id="run-tests" class="secondary" type="button">Run tests</button>
+          </div>
+          <pre id="test-log" role="log" aria-live="polite">Ready to run the project tests.</pre>
+        </section>
       </aside>
     </div>
     <footer>Sample books are included to help you explore the catalog. Books added here are kept until the app closes.</footer>
@@ -139,6 +151,7 @@ PAGE = """<!doctype html>
     const message = document.querySelector("#message");
     const subjectSelect = document.querySelector("#subject");
     let searchTimer;
+    let testPollTimer;
 
     async function loadBooks(sorted = false) {
       const params = new URLSearchParams();
@@ -178,29 +191,84 @@ PAGE = """<!doctype html>
         ? `Class number: ${code}`
         : "Choose a subject to see its class number.";
     });
-    document.querySelector("#add-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      message.textContent = "";
-      message.dataset.kind = "";
-      const form = new FormData(event.currentTarget);
+    const testButton = document.querySelector("#run-tests");
+    const testLog = document.querySelector("#test-log");
+    async function pollTestLog() {
       try {
-        const response = await fetch("/api/books", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(Object.fromEntries(form)),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || "Could not add this book.");
-        message.textContent = data.message;
-        message.dataset.kind = "success";
-        event.currentTarget.reset();
-        document.querySelector("#class-hint").textContent = "Choose a subject to see its class number.";
-        await loadBooks();
+        const response = await fetch("/api/tests");
+        if (!response.ok) throw new Error("Could not read test results.");
+        const state = await response.json();
+        testLog.textContent = state.output.join("\n");
+        testLog.dataset.kind = state.status === "failed" ? "error" : "";
+        testLog.scrollTop = testLog.scrollHeight;
+        if (state.status === "running") {
+          testPollTimer = setTimeout(pollTestLog, 200);
+        } else {
+          testButton.disabled = false;
+          testButton.textContent = "Run tests";
+        }
       } catch (error) {
-        message.textContent = error.message;
-        message.dataset.kind = "error";
+        testLog.textContent += `\n${error.message}`;
+        testLog.dataset.kind = "error";
+        testButton.disabled = false;
+        testButton.textContent = "Run tests";
+      }
+    }
+
+    testButton.addEventListener("click", async () => {
+      clearTimeout(testPollTimer);
+      testButton.disabled = true;
+      testButton.textContent = "Running…";
+      testLog.textContent = "Starting project tests…";
+      testLog.dataset.kind = "";
+      try {
+        const response = await fetch("/api/tests", { method: "POST" });
+        const state = await response.json();
+        if (!response.ok) throw new Error(state.message || "Could not start tests.");
+        await pollTestLog();
+      } catch (error) {
+        testLog.textContent = error.message;
+        testLog.dataset.kind = "error";
+        testButton.disabled = false;
+        testButton.textContent = "Run tests";
       }
     });
+    const addForm = document.querySelector("#add-form");
+    if (addForm) {
+      addForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        message.textContent = "";
+        message.dataset.kind = "";
+
+        const form = event.currentTarget;
+        if (!(form instanceof HTMLFormElement)) {
+          message.textContent = "The add-book form is unavailable.";
+          message.dataset.kind = "error";
+          return;
+        }
+
+        const formData = new FormData(form);
+        try {
+          const response = await fetch("/api/books", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(Object.fromEntries(formData)),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || "Could not add this book.");
+          message.textContent = data.message;
+          message.dataset.kind = "success";
+          if (typeof form.reset === "function") {
+            form.reset();
+          }
+          document.querySelector("#class-hint").textContent = "Choose a subject to see its class number.";
+          await loadBooks();
+        } catch (error) {
+          message.textContent = error.message;
+          message.dataset.kind = "error";
+        }
+      });
+    }
 
     function showLoadError(error) {
       document.querySelector("#result-count").textContent = error.message;
@@ -318,7 +386,7 @@ def restart_existing_app():
     raise RuntimeError("The existing Li-BIT-ry server did not stop in time.")
 
 
-def _create_handler(catalog, catalog_lock, token):
+def _create_handler(catalog, catalog_lock, token, test_state, test_lock):
     class CatalogHandler(BaseHTTPRequestHandler):
         def _send(self, status, body, content_type):
             encoded = body.encode("utf-8")
@@ -354,6 +422,15 @@ def _create_handler(catalog, catalog_lock, token):
                 )
                 return
 
+            if parsed.path == "/api/tests":
+                with test_lock:
+                    state = {
+                        "status": test_state["status"],
+                        "output": list(test_state["output"]),
+                    }
+                self._send_json(200, state)
+                return
+
             if parsed.path != "/api/books":
                 self._send_json(404, {"message": "Not found."})
                 return
@@ -385,6 +462,39 @@ def _create_handler(catalog, catalog_lock, token):
 
         def do_POST(self):
             path = urlparse(self.path).path
+            if path == "/api/tests":
+                with test_lock:
+                    if test_state["status"] == "running":
+                        self._send_json(
+                            409,
+                            {"message": "The test suite is already running."},
+                        )
+                        return
+                    test_state["status"] = "running"
+                    test_state["output"] = ["Running project tests…"]
+                self._send_json(202, {"message": "Tests started."})
+
+                def append_output(line):
+                    with test_lock:
+                        test_state["output"].append(line)
+
+                def run_tests():
+                    try:
+                        passed = run_test_process(append_output)
+                    except OSError as error:
+                        append_output(f"Could not start the test runner: {error}")
+                        passed = False
+                    with test_lock:
+                        test_state["status"] = "passed" if passed else "failed"
+                        test_state["output"].append(
+                            "All tests passed."
+                            if passed
+                            else "Tests failed. See the log above."
+                        )
+
+                Thread(target=run_tests, daemon=True).start()
+                return
+
             if path == "/api/shutdown":
                 try:
                     is_local = ipaddress.ip_address(self.client_address[0]).is_loopback
@@ -413,19 +523,18 @@ def _create_handler(catalog, catalog_lock, token):
                 self._send_json(400, {"message": "Please submit valid book details."})
                 return
 
-            book_id = payload.get("id")
             title = payload.get("title")
             subject = payload.get("subject")
-            if not all(isinstance(value, str) for value in (book_id, title, subject)):
-                self._send_json(400, {"message": "Please enter a book ID, title, and subject."})
+            if not all(isinstance(value, str) for value in (title, subject)):
+                self._send_json(400, {"message": "Please enter a book name and subject."})
                 return
-            book_id, title, subject = book_id.strip(), title.strip(), subject.strip()
-            if not book_id or not title or not subject:
-                self._send_json(400, {"message": "Please enter a book ID, title, and subject."})
+            title, subject = title.strip(), subject.strip()
+            if not title or not subject:
+                self._send_json(400, {"message": "Please enter a book name and subject."})
                 return
 
             with catalog_lock:
-                success, result = add_book(catalog, book_id, title, subject)
+                success, result = add_book(catalog, title, subject)
             self._send_json(
                 201 if success else 400,
                 {"message": result},
@@ -451,8 +560,11 @@ def _escape_html(value):
 def create_server(host="127.0.0.1", port=8000):
     catalog = [book.copy() for book in starter_books + MOCK_BOOKS]
     token = secrets.token_urlsafe(32)
+    test_state = {"status": "idle", "output": ["Ready to run the project tests."]}
+    test_lock = Lock()
     server = ThreadingHTTPServer(
-        (host, port), _create_handler(catalog, Lock(), token)
+        (host, port),
+        _create_handler(catalog, Lock(), token, test_state, test_lock),
     )
     server.li_bit_ry_token = token
     return server

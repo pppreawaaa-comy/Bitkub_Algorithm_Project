@@ -27,18 +27,35 @@ def test_mixed_order():
     matches = linear_search(test_books, "530")
     assert [book["id"] for book in matches] == ["B001", "B012"]
 
-    success, message = add_book(
-        test_books, "B013", "Environmental Studies", "Natural resources"
-    )
+    success, message = add_book(test_books, "Environmental Studies", "Natural resources")
     assert success, message
+    assert test_books[-1]["id"] == "B013"
+    success, message = add_book(test_books, "More Environmental Studies", "Natural resources")
+    assert success, message
+    assert test_books[-1]["id"] == "B014"
     insertion_sort(test_books)
 
-    assert len(test_books) == 13
+    assert len(test_books) == 14
     assert _is_ascending(test_books)
     assert [book["id"] for book in test_books if book["class_no"] == "333.7"] == [
         "B011",
         "B013",
+        "B014",
     ]
+    return True
+
+
+def test_add_book_validation():
+    test_books = _copy_books(original_books)
+    success, message = add_book(test_books, "", "Physics")
+    assert not success
+    assert "book name" in message
+    assert len(test_books) == len(original_books)
+
+    success, message = add_book(test_books, "A New Book", "")
+    assert not success
+    assert "book name" in message
+    assert len(test_books) == len(original_books)
     return True
 
 
@@ -112,6 +129,7 @@ def test_edge_cases():
 def run_all_tests():
     tests = [
         ("Mixed Order", test_mixed_order),
+        ("Add Book Validation", test_add_book_validation),
         ("Already Sorted", test_already_sorted),
         ("Reverse Order", test_reverse_order),
         ("Edge Cases", test_edge_cases),
@@ -121,3 +139,7 @@ def run_all_tests():
         print(f"{test_name}: PASS")
     print("All tests passed.")
     return True
+
+
+if __name__ == "__main__":
+    run_all_tests()

@@ -1,3 +1,4 @@
+from threading import Thread
 import tkinter as tk
 from tkinter import ttk
 
@@ -5,10 +6,12 @@ if __package__:
     from .algorithms import insertion_sort
     from .classification import add_book
     from .data import MOCK_BOOKS, SUBJECT_CODES, books as starter_books
+    from .test_runner import run_test_process
 else:
     from algorithms import insertion_sort
     from classification import add_book
     from data import MOCK_BOOKS, SUBJECT_CODES, books as starter_books
+    from test_runner import run_test_process
 
 
 def filter_books(records, query):
@@ -219,13 +222,11 @@ class LibraryApp:
             font=("TkDefaultFont", 9),
         ).grid(row=1, column=0, sticky="w", pady=(6, 16))
 
-        self.id_var = tk.StringVar()
         self.title_var = tk.StringVar()
         self.subject_var = tk.StringVar()
         self.form_status_var = tk.StringVar(value=" ")
         fields = (
-            ("Book ID", self.id_var),
-            ("Title", self.title_var),
+            ("Book name", self.title_var),
         )
         row = 2
         for label, variable in fields:
@@ -285,6 +286,47 @@ class LibraryApp:
             font=("TkDefaultFont", 9),
         )
         self.form_status_label.grid(row=row, column=0, sticky="w", pady=(10, 0))
+        row += 1
+
+        ttk.Separator(form).grid(row=row, column=0, sticky="ew", pady=(16, 12))
+        row += 1
+        test_header = ttk.Frame(form, style="Card.TFrame")
+        test_header.grid(row=row, column=0, sticky="ew")
+        test_header.columnconfigure(0, weight=1)
+        ttk.Label(test_header, text="Test log", style="CardTitle.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        self.run_tests_button = ttk.Button(
+            test_header,
+            text="Run tests",
+            command=self._run_tests,
+        )
+        self.run_tests_button.grid(row=0, column=1, sticky="e")
+        row += 1
+
+        log_frame = ttk.Frame(form, style="Card.TFrame")
+        log_frame.grid(row=row, column=0, sticky="nsew", pady=(9, 0))
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+        self.test_log = tk.Text(
+            log_frame,
+            height=6,
+            wrap="word",
+            state="disabled",
+            background="#f7f9fd",
+            foreground=self.INK,
+            relief="flat",
+            padx=9,
+            pady=7,
+            font=("TkFixedFont", 9),
+        )
+        self.test_log.grid(row=0, column=0, sticky="nsew")
+        log_scrollbar = ttk.Scrollbar(
+            log_frame, orient="vertical", command=self.test_log.yview
+        )
+        log_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.test_log.configure(yscrollcommand=log_scrollbar.set)
+        self._append_test_log("Ready to run the project tests.")
 
         ttk.Label(
             page,
@@ -348,25 +390,55 @@ class LibraryApp:
         self.status_var.set("Books sorted by classification number.")
 
     def _add_book(self):
-        book_id = self.id_var.get().strip()
         title = self.title_var.get().strip()
         subject = self.subject_var.get().strip()
-        if not book_id or not title or not subject:
+        if not title or not subject:
             self.form_status_var.set(
-                "Please enter a book ID and title, then choose a subject."
+                "Please enter a book name and choose a subject."
             )
             self.form_status_label.configure(foreground="#b42318")
             return
 
-        success, message = add_book(self.catalog, book_id, title, subject)
+        success, message = add_book(self.catalog, title, subject)
         self.form_status_var.set(message)
         self.form_status_label.configure(
             foreground="#18804b" if success else "#b42318"
         )
         if success:
-            self.id_var.set("")
             self.title_var.set("")
             self._refresh_catalog()
+
+    def _append_test_log(self, line):
+        self.test_log.configure(state="normal")
+        self.test_log.insert("end", f"{line}\n")
+        self.test_log.see("end")
+        self.test_log.configure(state="disabled")
+
+    def _run_tests(self):
+        self.run_tests_button.configure(state="disabled", text="Running…")
+        self.test_log.configure(state="normal")
+        self.test_log.delete("1.0", "end")
+        self.test_log.insert("end", "Running project tests…\n")
+        self.test_log.configure(state="disabled")
+
+        def report_line(line):
+            self.root.after(0, self._append_test_log, line)
+
+        def run():
+            try:
+                passed = run_test_process(report_line)
+            except OSError as error:
+                report_line(f"Could not start the test runner: {error}")
+                passed = False
+            self.root.after(0, self._finish_tests, passed)
+
+        Thread(target=run, daemon=True).start()
+
+    def _finish_tests(self, passed):
+        self._append_test_log(
+            "All tests passed." if passed else "Tests failed. See the log above."
+        )
+        self.run_tests_button.configure(state="normal", text="Run tests")
 
     def run(self):
         self.root.mainloop()
@@ -375,3 +447,22 @@ class LibraryApp:
 def launch_gui():
     root = tk.Tk()
     LibraryApp(root).run()
+
+
+def desktop_available():
+    """Check whether Tk can open a window in the current environment."""
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.update_idletasks()
+    except tk.TclError:
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+        return False
+
+    root.destroy()
+    return True
