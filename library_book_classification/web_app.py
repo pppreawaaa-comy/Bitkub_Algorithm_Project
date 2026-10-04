@@ -198,7 +198,7 @@ PAGE = """<!doctype html>
         const response = await fetch("/api/tests");
         if (!response.ok) throw new Error("Could not read test results.");
         const state = await response.json();
-        testLog.textContent = state.output.join("\n");
+        testLog.textContent = state.output.join("\\n");
         testLog.dataset.kind = state.status === "failed" ? "error" : "";
         testLog.scrollTop = testLog.scrollHeight;
         if (state.status === "running") {

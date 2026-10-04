@@ -142,8 +142,6 @@ class LibraryApp:
             font=("TkDefaultFont", 11),
         )
         search_entry.grid(row=0, column=1, sticky="ew")
-        search_entry.insert(0, "")
-        self.search_var.trace_add("write", lambda *_: self._refresh_catalog())
         ttk.Button(
             toolbar,
             text="Sort by class no.",
@@ -197,6 +195,7 @@ class LibraryApp:
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.table.configure(yscrollcommand=scrollbar.set)
         self.table.tag_configure("alternate", background="#f7f9fd")
+        self.search_var.trace_add("write", lambda *_: self._refresh_catalog())
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(
             catalog_card,
@@ -354,6 +353,9 @@ class LibraryApp:
         self.class_hint.configure(text=text)
 
     def _refresh_catalog(self):
+        if not hasattr(self, "table") or self.table is None:
+            return
+
         matches = filter_books(self.catalog, self.search_var.get())
         self.table.delete(*self.table.get_children())
         for index, book in enumerate(matches):

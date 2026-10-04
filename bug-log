@@ -58,6 +58,53 @@ Prevention:
 - Add a reset guard and clear error messages in debug mode.
 
 ------------------------------------------------------------
+Bug #003: Tkinter search trace fires before catalog table exists
+Date: 2026-10-04
+Module / Area: Desktop GUI: search field + catalog refresh
+
+Cause:
+The search field was wired to refresh the catalog before the Treeview widget was created. The `StringVar` trace fired during initialization, including on the initial empty value, and the refresh logic tried to access `self.table` before that widget existed. This left the GUI in an inconsistent state and could make the app appear unresponsive or empty.
+
+Symptoms:
+- GUI loads with an empty list
+- The catalog does not populate correctly on startup
+- Search or refresh actions can stall or fail during initialization
+
+Solution:
+1. Attach the search trace only after the table widget exists.
+2. Remove the unnecessary initial insert that triggered the trace too early.
+3. Add a guard in `_refresh_catalog` so refreshes fail safely if the UI is not ready yet.
+
+Prevention:
+- Register widget callbacks after all target widgets are created.
+- Guard UI refresh functions when dependent widgets may not exist yet.
+- Validate startup behavior before shipping GUI changes.
+
+------------------------------------------------------------
+Bug #004: Browser page script fails on startup from an escaped newline in JavaScript
+Date: 2026-10-04
+Module / Area: Browser app: page initialization / test log polling
+
+Cause:
+A JavaScript string inside the HTML template used `"\n"` in Python, but because the template is a Python triple-quoted string, the backslash sequence was processed by Python before the browser read it. This turned `"\n"` into a literal line break inside the JavaScript string, which caused a syntax error and stopped the rest of the page script from running.
+
+Symptoms:
+- HTML page loads, but the catalog stays empty
+- Metrics stay at "—"
+- Browser console shows a JavaScript syntax error at the test log code
+- The app looks unresponsive even though the page is rendered
+
+Solution:
+1. Escape the backslash as `\\n` inside the Python template string so the browser receives `\n` as intended.
+2. Keep the rest of the browser script guard-safe and only run the catalog loader after the DOM is ready.
+3. Validate the rendered page in a browser-like DOM environment before shipping.
+
+Prevention:
+- Be careful with escaping when embedding JavaScript inside Python strings.
+- Always test generated HTML with a browser-like runtime when the page script is complex.
+- Keep a record of string-escape bugs in this log to avoid repeating them.
+
+------------------------------------------------------------
 Template for future bugs
 
 Bug #NNN: [Short bug title]
